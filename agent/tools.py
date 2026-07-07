@@ -4,13 +4,29 @@ from typing import Tuple
 
 from langchain_core.tools import tool
 
-PROJECT_ROOT = pathlib.Path.cwd() / "generated_project"
+PROJECT_ROOT = (pathlib.Path.cwd() / "generated_project").resolve()
 
 
 def safe_path_for_project(path: str) -> pathlib.Path:
-    p = (PROJECT_ROOT / path).resolve()
-    if PROJECT_ROOT.resolve() not in p.parents and PROJECT_ROOT.resolve() != p.parent and PROJECT_ROOT.resolve() != p:
-        raise ValueError("Attempt to write outside project root")
+    path_obj = pathlib.Path(path)
+    
+    # If the LLM passed an absolute path, check if it's already inside PROJECT_ROOT
+    if path_obj.is_absolute():
+        try:
+            # If it's inside PROJECT_ROOT, this will succeed
+            path_obj.relative_to(PROJECT_ROOT)
+            p = path_obj.resolve()
+        except ValueError:
+            # If it's an absolute path outside PROJECT_ROOT, try treating it as relative to PROJECT_ROOT
+            # (LLMs often mistakenly prepend a leading slash like '/index.html')
+            p = (PROJECT_ROOT / path.lstrip("/\\")).resolve()
+    else:
+        p = (PROJECT_ROOT / path).resolve()
+
+    # Final guardrail check
+    if PROJECT_ROOT not in p.parents and PROJECT_ROOT != p:
+        raise ValueError(f"Attempt to write outside project root: {p}")
+        
     return p
 
 
