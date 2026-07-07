@@ -3,9 +3,9 @@ from langchain_groq.chat_models import ChatGroq
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import create_react_agent
-from agent.prompts import *
-from agent.states import *
-from agent.tools import *
+from prompts import *
+from states import *
+from tools import *
 load_dotenv()
 
 
@@ -56,11 +56,32 @@ def coder_agent(state: dict) -> dict:
         "Use write_file(path, content) to save your changes."
     )
 
-    coder_tools = []
+    coder_tools = [read_file, write_file, list_files, get_current_directory]
     react_agent = create_react_agent(llm, coder_tools)
 
-    react_agent.invoke({"messages": [{"role": "system", "content": system_prompt},
-                                     {"role": "user", "content": user_prompt}]})
+    print(react_agent.invoke({"messages": [{"role": "system", "content": system_prompt},
+                                     {"role": "user", "content": user_prompt}]}))
 
     coder_state.current_step_idx += 1
     return {"coder_state": coder_state}
+
+graph = StateGraph(dict)
+
+graph.add_node("planner", planner_agent)
+graph.add_node("architect", architect_agent)
+graph.add_node("coder", coder_agent)
+
+graph.add_edge("planner", "architect")
+graph.add_edge("architect", "coder")
+graph.add_conditional_edges(
+    "coder",
+    lambda s: "END" if s.get("status") == "DONE" else "coder",
+    {"END": END, "coder": "coder"}
+)
+
+graph.set_entry_point("planner")
+agent = graph.compile()
+if __name__ == "__main__":
+    result = agent.invoke({"user_prompt": "Build a colourful modern todo app in html css and js"},
+                          {"recursion_limit": 100})
+    print("Final State:", result)
